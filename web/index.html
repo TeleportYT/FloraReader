@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌸 FloraReader - iPhone WiFi Book Loader</title>
+    <style>
+        :root {
+            --bg-color: #fffaf5;
+            --card-bg: #ffffff;
+            --primary: #e88ca5;
+            --primary-hover: #d2728c;
+            --accent: #95d5b2;
+            --text-dark: #4a3e3d;
+            --border-color: #ffd8e4;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            display: flex;
+            justify-content: center;
+            padding: 20px 12px;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            border: 2px solid var(--border-color);
+            box-shadow: 0 12px 32px rgba(232, 140, 165, 0.15);
+            padding: 24px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            color: #887a79;
+            margin-top: 4px;
+        }
+
+        .upload-area {
+            border: 2.5px dashed var(--primary);
+            border-radius: 18px;
+            padding: 28px 16px;
+            text-align: center;
+            background-color: #fff5f8;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .upload-area:active, .upload-area.dragover {
+            background-color: #ffe6ee;
+            transform: scale(0.99);
+        }
+
+        .upload-icon {
+            font-size: 2.4rem;
+            margin-bottom: 8px;
+        }
+
+        .upload-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--primary-hover);
+        }
+
+        .upload-subtitle {
+            font-size: 0.82rem;
+            color: #9c8b8a;
+            margin-top: 4px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .progress-container {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .progress-bar-bg {
+            height: 12px;
+            background-color: #f0e6e8;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--primary);
+            transition: width 0.15s ease;
+        }
+
+        .status-msg {
+            font-size: 0.85rem;
+            text-align: center;
+            color: var(--primary-hover);
+            font-weight: 500;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1.5px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        .file-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background-color: #fdf6f8;
+            border-radius: 12px;
+            border: 1px solid #fae1e8;
+        }
+
+        .file-name {
+            font-size: 0.92rem;
+            font-weight: 500;
+            color: var(--text-dark);
+            word-break: break-all;
+        }
+
+        .delete-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .empty-msg {
+            text-align: center;
+            color: #b0a0a0;
+            font-size: 0.88rem;
+            padding: 16px 0;
+        }
+
+        .footer-note {
+            text-align: center;
+            font-size: 0.78rem;
+            color: #a89897;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌸 FloraReader</h1>
+            <p>Wireless Book Upload Portal for LilyGO T5S</p>
+        </div>
+
+        <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📚</div>
+            <div class="upload-title">Tap to Choose Book File</div>
+            <div class="upload-subtitle">Supports .txt and .md files</div>
+            <input type="file" id="fileInput" accept=".txt,.md">
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressBar"></div>
+            </div>
+            <div class="status-msg" id="statusMsg">Uploading book...</div>
+        </div>
+
+        <div class="section-title">
+            <span>🌸 Books on SD Card</span>
+        </div>
+
+        <ul class="file-list" id="fileList">
+            <li class="empty-msg">Loading library...</li>
+        </ul>
+
+        <div class="footer-note">
+            Connected via WiFi Access Point: FloraReader-WiFi
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const statusMsg = document.getElementById('statusMsg');
+        const fileList = document.getElementById('fileList');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        });
+
+        function uploadFile(file) {
+            progressContainer.style.display = 'flex';
+            progressBar.style.width = '0%';
+            statusMsg.textContent = `Uploading ${file.name}...`;
+
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('file', file, file.name);
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = percent + '%';
+                    statusMsg.textContent = `Uploading... ${percent}%`;
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    statusMsg.textContent = `✨ Successfully uploaded ${file.name}!`;
+                    progressBar.style.width = '100%';
+                    fileInput.value = '';
+                    setTimeout(fetchLibrary, 800);
+                } else {
+                    statusMsg.textContent = '❌ Upload failed. Please try again.';
+                }
+            });
+
+            xhr.open('POST', '/upload', true);
+            xhr.send(formData);
+        }
+
+        function fetchLibrary() {
+            fetch('/api/books')
+                .then(res => res.json())
+                .then(books => {
+                    fileList.innerHTML = '';
+                    if (books.length === 0) {
+                        fileList.innerHTML = '<li class="empty-msg">No books uploaded yet! 🌸</li>';
+                        return;
+                    }
+                    books.forEach(book => {
+                        const li = document.createElement('li');
+                        li.className = 'file-item';
+                        li.innerHTML = `
+                            <span class="file-name">📖 ${book}</span>
+                            <button class="delete-btn" onclick="deleteBook('${book}')">Delete</button>
+                        `;
+                        fileList.appendChild(li);
+                    });
+                })
+                .catch(() => {
+                    fileList.innerHTML = '<li class="empty-msg">Error loading books</li>';
+                });
+        }
+
+        function deleteBook(filename) {
+            if (confirm(`Delete ${filename}?`)) {
+                fetch('/api/delete?name=' + encodeURIComponent(filename), { method: 'DELETE' })
+                    .then(() => fetchLibrary());
+            }
+        }
+
+        fetchLibrary();
+    </script>
+</body>
+</html>
