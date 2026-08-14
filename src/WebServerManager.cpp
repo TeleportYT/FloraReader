@@ -133,15 +133,18 @@ void WebServerManager::begin() {
     if (m_running) return;
 
     Serial.println("[WiFi] Starting Access Point mode...");
+    WiFi.disconnect(true);
+    delay(50);
     WiFi.mode(WIFI_AP);
     delay(50);
     WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
-    WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
+    bool apStarted = WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS, 1, 0, 4);
     WiFi.setSleep(false);  // Disable WiFi modem sleep to keep AP alive
     
     IPAddress IP = WiFi.softAPIP();
     m_ipAddress = IP.toString();
-    Serial.printf("[WiFi] AP IP address: %s\n", m_ipAddress.c_str());
+    Serial.printf("[WiFi] SoftAP status: %s (SSID: %s, Pass: %s, IP: %s)\n", 
+                  apStarted ? "ACTIVE" : "FAILED", WIFI_AP_SSID, WIFI_AP_PASS, m_ipAddress.c_str());
 
     m_dnsServer.start(53, "*", IP);
 
@@ -158,7 +161,10 @@ void WebServerManager::stop() {
         m_running = false;
         m_dnsServer.stop();
         m_server.end();
+        WiFi.softAPdisconnect(true);
+        WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
+        delay(50);
         Serial.println("[WiFi] Web Server and AP stopped safely.");
     }
 }
