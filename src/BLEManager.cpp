@@ -13,28 +13,37 @@ private:
     bool& m_connected;
 };
 
-BLEManager::BLEManager() : m_deviceConnected(false), m_pServer(nullptr), m_pTxCharacteristic(nullptr) {
+BLEManager::BLEManager() : m_deviceConnected(false), m_initialized(false), m_pServer(nullptr), m_pTxCharacteristic(nullptr) {
 }
 
 void BLEManager::begin() {
-    BLEDevice::init("FloraReader-BLE");
-    m_pServer = BLEDevice::createServer();
-    m_pServer->setCallbacks(new ServerCallbacks(m_deviceConnected));
+    if (!m_initialized) {
+        // First-time full initialization
+        BLEDevice::init("FloraReader-BLE");
+        m_pServer = BLEDevice::createServer();
+        m_pServer->setCallbacks(new ServerCallbacks(m_deviceConnected));
 
-    BLEService *pService = m_pServer->createService(SERVICE_UUID);
-    m_pTxCharacteristic = pService->createCharacteristic(
-                            CHARACTERISTIC_UUID_TX,
-                            BLECharacteristic::PROPERTY_NOTIFY
-                          );
-    m_pTxCharacteristic->addDescriptor(new BLE2902());
+        BLEService *pService = m_pServer->createService(SERVICE_UUID);
+        m_pTxCharacteristic = pService->createCharacteristic(
+                                CHARACTERISTIC_UUID_TX,
+                                BLECharacteristic::PROPERTY_NOTIFY
+                              );
+        m_pTxCharacteristic->addDescriptor(new BLE2902());
 
-    pService->start();
+        pService->start();
+        m_initialized = true;
+        Serial.println("[BLE] Bluetooth BLE service initialized: FloraReader-BLE");
+    }
+
+    // Start (or restart) advertising
     m_pServer->getAdvertising()->start();
-    Serial.println("[BLE] Bluetooth BLE service started: FloraReader-BLE");
+    Serial.println("[BLE] Bluetooth advertising started.");
 }
 
 void BLEManager::stop() {
-    BLEDevice::deinit(true);
+    if (m_initialized && m_pServer) {
+        m_pServer->getAdvertising()->stop();
+        Serial.println("[BLE] Bluetooth advertising stopped.");
+    }
     m_deviceConnected = false;
-    Serial.println("[BLE] Bluetooth service stopped.");
 }

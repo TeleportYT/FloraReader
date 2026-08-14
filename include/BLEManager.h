@@ -16,6 +16,7 @@ public:
 
 private:
     bool m_deviceConnected;
+    bool m_initialized;
     BLEServer* m_pServer;
     BLECharacteristic* m_pTxCharacteristic;
 };

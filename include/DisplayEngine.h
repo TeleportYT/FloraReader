@@ -17,7 +17,8 @@ enum UIState {
     STATE_LIBRARY,
     STATE_READING,
     STATE_WIFI_PORTAL,
-    STATE_SETTINGS
+    STATE_SETTINGS,
+    STATE_SLEEP
 };
 
 class DisplayEngine {
@@ -35,6 +36,9 @@ public:
     void drawFloralFooter(int currentPage, int totalPages, float progressPercent);
     void drawFloralBorder();
     
+    // BMP Image Renderer for Screensaver / Artwork
+    bool drawBmpImage(const String& path, int x = 0, int y = 0);
+    
     // Fast Page Renderers with Partial Refresh support
     void renderMainMenu(int selectedIndex, int batteryPct);
     void renderLibrary(const std::vector<String>& bookList, int selectedIndex, int topIndex, int totalBooks);
@@ -42,6 +46,7 @@ public:
     void renderWiFiPortal(const char* ssid, const char* ipAddress, int fileCount);
     void renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode);
     void renderNotification(const char* message, const char* subtext);
+    void renderSleepScreen(int batteryPercent);
 
     DisplayType& getDisplay() { return m_display; }
     void resetPageTurnCounter() { m_pageTurnCount = 0; }

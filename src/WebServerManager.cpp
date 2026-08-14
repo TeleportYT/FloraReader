@@ -27,21 +27,22 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <h1>🌸 FloraReader</h1>
         <p style="text-align:center; font-size: 0.85rem; color:#888;">Upload books wirelessly from iPhone</p>
         <div class="drop" onclick="document.getElementById('f').click()">
-            <div style="font-size:2rem;">📚</div>
-            <div style="font-weight:600; margin-top:4px;">Tap to Select Book (.txt / .md)</div>
-            <input type="file" id="f" style="display:none" onchange="up(this.files[0])">
+            <div style="font-size:2rem;">📚🖼️</div>
+            <div style="font-weight:600; margin-top:4px;">Tap to Select Book or Image (.txt / .md / .bmp)</div>
+            <input type="file" id="f" style="display:none" accept=".txt,.md,.bmp" onchange="up(this.files[0])">
         </div>
         <div id="st" style="text-align:center; font-weight:500; color:var(--primary);"></div>
-        <h3>🌸 SD Card Library</h3>
+        <h3>🌸 SD Card Library & Screensavers</h3>
         <ul id="list"><li>Loading...</li></ul>
     </div>
     <script>
         function load() {
             fetch('/api/books').then(r=>r.json()).then(b=>{
                 let l = document.getElementById('list'); l.innerHTML = '';
-                if(!b.length) { l.innerHTML = '<li style="justify-content:center">No books yet 🌸</li>'; return; }
+                if(!b.length) { l.innerHTML = '<li style="justify-content:center">No files yet 🌸</li>'; return; }
                 b.forEach(x => {
-                    l.innerHTML += `<li><span>📖 ${x}</span><button class="del" onclick="del('${x}')">Delete</button></li>`;
+                    let icon = (x.endsWith('.bmp') || x.endsWith('.BMP')) ? '🖼️' : '📖';
+                    l.innerHTML += `<li><span>${icon} ${x}</span><button class="del" onclick="del('${x}')">Delete</button></li>`;
                 });
             });
         }
@@ -77,12 +78,12 @@ void WebServerManager::begin() {
     delay(50);
     WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
     WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
+    WiFi.setSleep(false);  // Disable WiFi modem sleep to keep AP alive
     
     IPAddress IP = WiFi.softAPIP();
     m_ipAddress = IP.toString();
     Serial.printf("[WiFi] AP IP address: %s\n", m_ipAddress.c_str());
 
-    // Start DNS Server on port 53 to redirect all domains (Captive Portal for iPhone/Android)
     m_dnsServer.start(53, "*", IP);
 
     if (!m_routesSetup) {
@@ -110,12 +111,10 @@ void WebServerManager::loop() {
 }
 
 void WebServerManager::setupRoutes() {
-    // Serve Web UI Root
     m_server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/html", INDEX_HTML);
     });
 
-    // iOS / Android Captive Portal detection probes
     m_server.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send_P(200, "text/html", INDEX_HTML);
     });
@@ -132,12 +131,10 @@ void WebServerManager::setupRoutes() {
         request->send_P(200, "text/html", INDEX_HTML);
     });
 
-    // Fallback for any unknown route -> redirect to root
     m_server.onNotFound([](AsyncWebServerRequest *request) {
         request->redirect("http://192.168.4.1/");
     });
 
-    // API: Get List of Books
     m_server.on("/api/books", HTTP_GET, [this](AsyncWebServerRequest *request) {
         JsonDocument doc;
         JsonArray array = doc.to<JsonArray>();
@@ -152,7 +149,6 @@ void WebServerManager::setupRoutes() {
         request->send(200, "application/json", jsonResponse);
     });
 
-    // API: Delete a Book
     m_server.on("/api/delete", HTTP_DELETE, [this](AsyncWebServerRequest *request) {
         if (request->hasParam("name")) {
             String filename = request->getParam("name")->value();
@@ -165,7 +161,6 @@ void WebServerManager::setupRoutes() {
         request->send(400, "text/plain", "Error deleting file");
     });
 
-    // Multipart File Upload Handler
     m_server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", "OK");
     }, [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -188,3 +183,4 @@ void WebServerManager::setupRoutes() {
         }
     });
 }
+

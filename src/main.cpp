@@ -24,8 +24,11 @@ int settingsSelection = 0;
 
 Preferences mainPrefs;
 
-// Button Debounce Timers
+// Button & Idle Activity Timers
 unsigned long lastBtnCheck = 0;
+unsigned long lastActivityTime = 0;
+const unsigned long IDLE_TIMEOUT_MS = 180000; // 3 Minutes (180,000 ms)
+UIState stateBeforeSleep = STATE_MAIN_MENU;
 
 void handleInput();
 void updateUI();
@@ -34,10 +37,9 @@ void setup() {
     Serial.begin(115200);
     delay(500);
     Serial.println("\n==========================================");
-    Serial.println("   🌸 FloraReader - LilyGO T5S 2.7\" E-Paper");
+    Serial.println("   FloraReader - LilyGO T5S 2.7\" E-Paper");
     Serial.println("==========================================");
 
-    // Initialize Subsystems
     power.begin();
     
     pinMode(BUTTON_PREV, INPUT_PULLUP);
@@ -46,7 +48,6 @@ void setup() {
 
     display.begin();
 
-    // Load saved settings from NVS
     mainPrefs.begin(NVS_NAMESPACE, true);
     int savedRot = mainPrefs.getInt("rotation", 1);
     int savedRefresh = mainPrefs.getInt("refresh_int", 10);
@@ -62,13 +63,12 @@ void setup() {
         display.renderNotification("SD Error!", "Please insert MicroSD card.");
         delay(2000);
     } else {
-        // Automatically restore last read book & page on boot
         reader.restoreLastReadBook();
     }
 
     bleManager.begin();
 
-    // Initial render of main menu
+    lastActivityTime = millis();
     updateUI();
 }
 
@@ -76,31 +76,49 @@ void loop() {
     if (currentState == STATE_WIFI_PORTAL) {
         webServer.loop();
     }
+
+    // Trigger Idle Screen Saver after 3 minutes of inactivity (except in WiFi portal)
+    if (currentState != STATE_SLEEP && currentState != STATE_WIFI_PORTAL) {
+        if (millis() - lastActivityTime > IDLE_TIMEOUT_MS) {
+            stateBeforeSleep = currentState;
+            currentState = STATE_SLEEP;
+            updateUI();
+        }
+    }
+
     handleInput();
     delay(20);
 }
 
 void handleInput() {
-    if (millis() - lastBtnCheck < 250) return; // Debounce 250ms
+    if (millis() - lastBtnCheck < 250) return;
 
-    bool btn37 = (digitalRead(BUTTON_PREV) == LOW); // Left / Up / Prev
-    bool btn38 = (digitalRead(BUTTON_MENU) == LOW); // Center / Select / Menu
-    bool btn39 = (digitalRead(BUTTON_NEXT) == LOW); // Right / Down / Next
+    bool btn37 = (digitalRead(BUTTON_PREV) == LOW);
+    bool btn38 = (digitalRead(BUTTON_MENU) == LOW);
+    bool btn39 = (digitalRead(BUTTON_NEXT) == LOW);
 
     if (!btn37 && !btn38 && !btn39) return;
 
     lastBtnCheck = millis();
+    lastActivityTime = millis(); // Reset idle activity timer on any button press
+
+    // Wake up from Idle Screen Saver on any button press
+    if (currentState == STATE_SLEEP) {
+        currentState = stateBeforeSleep;
+        updateUI();
+        return;
+    }
 
     switch (currentState) {
         case STATE_MAIN_MENU:
-            if (btn37) { // Up
+            if (btn37) {
                 menuSelection = (menuSelection - 1 + 4) % 4;
                 updateUI();
-            } else if (btn39) { // Down
+            } else if (btn39) {
                 menuSelection = (menuSelection + 1) % 4;
                 updateUI();
-            } else if (btn38) { // Select
-                if (menuSelection == 0) { // Read Current Book
+            } else if (btn38) {
+                if (menuSelection == 0) {
                     if (reader.getCurrentPage() > 0 && reader.getTotalPages() > 0) {
                         currentState = STATE_READING;
                     } else if (library.getBookCount() > 0) {
@@ -109,17 +127,17 @@ void handleInput() {
                     } else {
                         currentState = STATE_LIBRARY;
                     }
-                } else if (menuSelection == 1) { // Book Library
+                } else if (menuSelection == 1) {
                     library.scanBooksDirectory();
                     librarySelection = 0;
                     libraryTopIndex = 0;
                     currentState = STATE_LIBRARY;
-                } else if (menuSelection == 2) { // WiFi Upload Portal
+                } else if (menuSelection == 2) {
                     bleManager.stop();
                     delay(100);
                     webServer.begin();
                     currentState = STATE_WIFI_PORTAL;
-                } else if (menuSelection == 3) { // Settings
+                } else if (menuSelection == 3) {
                     settingsSelection = 0;
                     currentState = STATE_SETTINGS;
                 }
@@ -128,19 +146,19 @@ void handleInput() {
             break;
 
         case STATE_LIBRARY:
-            if (btn37) { // Previous item
+            if (btn37) {
                 if (librarySelection > 0) {
                     librarySelection--;
                     if (librarySelection < libraryTopIndex) libraryTopIndex = librarySelection;
                     updateUI();
                 }
-            } else if (btn39) { // Next item
+            } else if (btn39) {
                 if (librarySelection < library.getBookCount() - 1) {
                     librarySelection++;
                     if (librarySelection >= libraryTopIndex + 5) libraryTopIndex++;
                     updateUI();
                 }
-            } else if (btn38) { // Open selected book
+            } else if (btn38) {
                 if (library.getBookCount() > 0) {
                     String path = library.getBookPath(librarySelection);
                     if (reader.openBook(path)) {
@@ -155,15 +173,15 @@ void handleInput() {
             break;
 
         case STATE_READING:
-            if (btn37) { // Prev Page
+            if (btn37) {
                 if (reader.prevPage()) {
                     updateUI();
                 }
-            } else if (btn39) { // Next Page
+            } else if (btn39) {
                 if (reader.nextPage()) {
                     updateUI();
                 }
-            } else if (btn38) { // Back to Main Menu
+            } else if (btn38) {
                 reader.saveBookmark();
                 currentState = STATE_MAIN_MENU;
                 updateUI();
@@ -171,14 +189,17 @@ void handleInput() {
             break;
 
         case STATE_WIFI_PORTAL:
-            if (btn38) { // Exit WiFi Portal
+            if (btn38) {
                 webServer.stop();
                 delay(100);
-                bleManager.begin();
-                library.scanBooksDirectory();
+                // Transition UI first so the screen updates even if BLE has issues
                 currentState = STATE_MAIN_MENU;
-                lastBtnCheck = millis() + 500; // Extra debounce buffer on WiFi exit
+                display.clearScreen();
                 updateUI();
+                lastBtnCheck = millis() + 500;
+                // Non-critical tasks after UI is already showing main menu
+                library.scanBooksDirectory();
+                bleManager.begin();
             }
             break;
 
@@ -191,7 +212,6 @@ void handleInput() {
                 updateUI();
             } else if (btn38) {
                 if (settingsSelection == 0) {
-                    // Toggle Rotation (Landscape=1 vs Portrait=0)
                     int newRot = (display.getRotationMode() == 1) ? 0 : 1;
                     display.setRotationMode(newRot);
                     reader.setDisplayDimensions(display.getScreenWidth(), display.getScreenHeight());
@@ -201,7 +221,6 @@ void handleInput() {
                     mainPrefs.end();
                     updateUI();
                 } else if (settingsSelection == 1) {
-                    // Cycle Refresh Interval: 5 -> 10 -> 15 -> 20 -> 5
                     int curRef = display.getRefreshInterval();
                     int newRef = (curRef == 5) ? 10 : (curRef == 10) ? 15 : (curRef == 15) ? 20 : 5;
                     display.setRefreshInterval(newRef);
@@ -214,6 +233,11 @@ void handleInput() {
                     updateUI();
                 }
             }
+            break;
+
+        case STATE_SLEEP:
+            currentState = stateBeforeSleep;
+            updateUI();
             break;
     }
 }
@@ -247,5 +271,10 @@ void updateUI() {
         case STATE_SETTINGS:
             display.renderSettingsMenu(settingsSelection, display.getRefreshInterval(), display.getRotationMode());
             break;
+
+        case STATE_SLEEP:
+            display.renderSleepScreen(batPct);
+            break;
     }
 }
+
