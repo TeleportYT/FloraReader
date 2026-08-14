@@ -30,6 +30,16 @@ unsigned long lastActivityTime = 0;
 const unsigned long IDLE_TIMEOUT_MS = 180000; // 3 Minutes (180,000 ms)
 UIState stateBeforeSleep = STATE_MAIN_MENU;
 
+// Auto Page Turn State
+bool autoPageEnabled = false;
+int autoPageInterval = DEFAULT_AUTO_PAGE_SEC;
+unsigned long lastAutoPageTime = 0;
+
+// Long-press Detection for btn37
+unsigned long btn37PressStart = 0;
+bool btn37WasLongPress = false;
+const unsigned long LONG_PRESS_MS = 800;
+
 void handleInput();
 void updateUI();
 
@@ -51,10 +61,12 @@ void setup() {
     mainPrefs.begin(NVS_NAMESPACE, true);
     int savedRot = mainPrefs.getInt("rotation", 1);
     int savedRefresh = mainPrefs.getInt("refresh_int", 10);
+    int savedAutoPage = mainPrefs.getInt("auto_page_s", DEFAULT_AUTO_PAGE_SEC);
     mainPrefs.end();
 
     display.setRotationMode(savedRot);
     display.setRefreshInterval(savedRefresh);
+    autoPageInterval = savedAutoPage;
     reader.setDisplayDimensions(display.getScreenWidth(), display.getScreenHeight());
 
     display.renderNotification("FloraReader", "Starting up...");
@@ -80,9 +92,25 @@ void loop() {
     // Trigger Idle Screen Saver after 3 minutes of inactivity (except in WiFi portal)
     if (currentState != STATE_SLEEP && currentState != STATE_WIFI_PORTAL) {
         if (millis() - lastActivityTime > IDLE_TIMEOUT_MS) {
+            autoPageEnabled = false; // Stop auto page when going idle
             stateBeforeSleep = currentState;
             currentState = STATE_SLEEP;
             updateUI();
+        }
+    }
+
+    // Auto Page Turn: advance page at configured interval
+    if (currentState == STATE_READING && autoPageEnabled) {
+        if (millis() - lastAutoPageTime >= (unsigned long)autoPageInterval * 1000UL) {
+            lastAutoPageTime = millis();
+            lastActivityTime = millis(); // Keep device awake during auto-page
+            if (reader.nextPage()) {
+                updateUI();
+            } else {
+                // Reached end of book, stop auto-page
+                autoPageEnabled = false;
+                updateUI();
+            }
         }
     }
 
@@ -91,11 +119,54 @@ void loop() {
 }
 
 void handleInput() {
+    // --- Long-press detection for btn37 in reading mode ---
+    if (currentState == STATE_READING) {
+        bool btn37Now = (digitalRead(BUTTON_PREV) == LOW);
+
+        if (btn37Now && btn37PressStart == 0) {
+            // Button just pressed down
+            btn37PressStart = millis();
+            btn37WasLongPress = false;
+        } else if (btn37Now && btn37PressStart > 0 && !btn37WasLongPress) {
+            // Button still held — check for long press
+            if (millis() - btn37PressStart >= LONG_PRESS_MS) {
+                btn37WasLongPress = true;
+                lastActivityTime = millis();
+                lastBtnCheck = millis();
+                // Toggle auto page turn
+                autoPageEnabled = !autoPageEnabled;
+                lastAutoPageTime = millis();
+                Serial.printf("[AutoPage] %s (interval: %ds)\n", autoPageEnabled ? "ON" : "OFF", autoPageInterval);
+                updateUI();
+            }
+        } else if (!btn37Now) {
+            // Button released
+            if (btn37PressStart > 0 && !btn37WasLongPress) {
+                // Short press — handle as prev page below via normal flow
+            }
+            btn37PressStart = 0;
+            // Don't reset btn37WasLongPress here, it's checked below
+        }
+
+        // If long press was detected, skip normal btn37 handling this cycle
+        if (btn37WasLongPress) {
+            if (!btn37Now) {
+                btn37WasLongPress = false; // Reset after release
+            }
+            // Fall through to normal debounce check for btn38/btn39 only
+        }
+    }
+
     if (millis() - lastBtnCheck < 250) return;
 
     bool btn37 = (digitalRead(BUTTON_PREV) == LOW);
     bool btn38 = (digitalRead(BUTTON_MENU) == LOW);
     bool btn39 = (digitalRead(BUTTON_NEXT) == LOW);
+
+    // In reading mode, suppress btn37 if it was a long press
+    if (currentState == STATE_READING && btn37 && btn37WasLongPress) {
+        btn37 = false;
+    }
 
     if (!btn37 && !btn38 && !btn39) return;
 
@@ -174,14 +245,17 @@ void handleInput() {
 
         case STATE_READING:
             if (btn37) {
+                autoPageEnabled = false; // Manual navigation stops auto-page
                 if (reader.prevPage()) {
                     updateUI();
                 }
             } else if (btn39) {
+                autoPageEnabled = false; // Manual navigation stops auto-page
                 if (reader.nextPage()) {
                     updateUI();
                 }
             } else if (btn38) {
+                autoPageEnabled = false;
                 reader.saveBookmark();
                 currentState = STATE_MAIN_MENU;
                 updateUI();
@@ -205,10 +279,10 @@ void handleInput() {
 
         case STATE_SETTINGS:
             if (btn37) {
-                settingsSelection = (settingsSelection - 1 + 3) % 3;
+                settingsSelection = (settingsSelection - 1 + 4) % 4;
                 updateUI();
             } else if (btn39) {
-                settingsSelection = (settingsSelection + 1) % 3;
+                settingsSelection = (settingsSelection + 1) % 4;
                 updateUI();
             } else if (btn38) {
                 if (settingsSelection == 0) {
@@ -229,6 +303,18 @@ void handleInput() {
                     mainPrefs.end();
                     updateUI();
                 } else if (settingsSelection == 2) {
+                    // Cycle auto page interval: 10 -> 15 -> 20 -> 30 -> 45 -> 60 -> 10
+                    if (autoPageInterval <= 10) autoPageInterval = 15;
+                    else if (autoPageInterval <= 15) autoPageInterval = 20;
+                    else if (autoPageInterval <= 20) autoPageInterval = 30;
+                    else if (autoPageInterval <= 30) autoPageInterval = 45;
+                    else if (autoPageInterval <= 45) autoPageInterval = 60;
+                    else autoPageInterval = 10;
+                    mainPrefs.begin(NVS_NAMESPACE, false);
+                    mainPrefs.putInt("auto_page_s", autoPageInterval);
+                    mainPrefs.end();
+                    updateUI();
+                } else if (settingsSelection == 3) {
                     currentState = STATE_MAIN_MENU;
                     updateUI();
                 }
@@ -260,7 +346,8 @@ void updateUI() {
                 reader.getCurrentPageLines(),
                 reader.getCurrentPage(),
                 reader.getTotalPages(),
-                reader.getProgressPercent()
+                reader.getProgressPercent(),
+                autoPageEnabled
             );
             break;
 
@@ -269,7 +356,7 @@ void updateUI() {
             break;
 
         case STATE_SETTINGS:
-            display.renderSettingsMenu(settingsSelection, display.getRefreshInterval(), display.getRotationMode());
+            display.renderSettingsMenu(settingsSelection, display.getRefreshInterval(), display.getRotationMode(), autoPageInterval);
             break;
 
         case STATE_SLEEP:
@@ -277,4 +364,3 @@ void updateUI() {
             break;
     }
 }
-

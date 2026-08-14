@@ -1,5 +1,6 @@
 #include "WebServerManager.h"
 #include <SD.h>
+#include <Update.h>
 
 // Embedded HTML page stored in PROGMEM for instant delivery
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
@@ -8,18 +9,25 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌸 FloraReader - iPhone WiFi Book Loader</title>
+    <title>🌸 FloraReader - WiFi Book Loader & OTA</title>
     <style>
-        :root { --bg: #fffaf5; --card: #ffffff; --primary: #e88ca5; --text: #4a3e3d; }
+        :root { --bg: #fffaf5; --card: #ffffff; --primary: #e88ca5; --text: #4a3e3d; --accent: #c56b82; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
         body { background: var(--bg); color: var(--text); display: flex; justify-content: center; padding: 16px; }
         .box { width: 100%; max-width: 440px; background: var(--card); border-radius: 20px; border: 2px solid #ffd8e4; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
         h1 { color: var(--primary); text-align: center; font-size: 1.6rem; }
+        h3 { color: var(--accent); }
         .drop { border: 2px dashed var(--primary); border-radius: 14px; padding: 24px; text-align: center; background: #fff5f8; cursor: pointer; }
-        .btn { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
         li { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #fdf6f8; border-radius: 8px; font-size: 0.9rem; }
         .del { background: #ff6b6b; color: white; border: none; border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; cursor: pointer; }
+        .progress-wrap { background: #f0e0e5; border-radius: 8px; overflow: hidden; height: 20px; display: none; }
+        .progress-bar { background: linear-gradient(90deg, var(--primary), var(--accent)); height: 100%; width: 0%; transition: width 0.3s; border-radius: 8px; }
+        .ota-section { border-top: 2px solid #ffd8e4; padding-top: 16px; }
+        .ota-drop { border: 2px dashed var(--accent); border-radius: 14px; padding: 20px; text-align: center; background: #fef0f3; cursor: pointer; }
+        .status { text-align: center; font-weight: 500; color: var(--primary); min-height: 1.2em; }
     </style>
 </head>
 <body>
@@ -31,9 +39,23 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <div style="font-weight:600; margin-top:4px;">Tap to Select Book or Image (.txt / .md / .bmp)</div>
             <input type="file" id="f" style="display:none" accept=".txt,.md,.bmp" onchange="up(this.files[0])">
         </div>
-        <div id="st" style="text-align:center; font-weight:500; color:var(--primary);"></div>
+        <div id="st" class="status"></div>
         <h3>🌸 SD Card Library & Screensavers</h3>
         <ul id="list"><li>Loading...</li></ul>
+
+        <div class="ota-section">
+            <h3>⚡ Firmware Update (OTA)</h3>
+            <p style="font-size: 0.8rem; color:#888; margin: 4px 0 12px;">Upload a .bin firmware file to update FloraReader wirelessly.</p>
+            <div class="ota-drop" onclick="document.getElementById('fw').click()">
+                <div style="font-size:1.8rem;">⚙️</div>
+                <div style="font-weight:600; margin-top:4px;">Tap to Select Firmware (.bin)</div>
+                <input type="file" id="fw" style="display:none" accept=".bin" onchange="otaUp(this.files[0])">
+            </div>
+            <div class="progress-wrap" id="otaProg">
+                <div class="progress-bar" id="otaBar"></div>
+            </div>
+            <div id="otaSt" class="status"></div>
+        </div>
     </div>
     <script>
         function load() {
@@ -59,6 +81,43 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             if(confirm('Delete ' + name + '?')) {
                 fetch('/api/delete?name=' + encodeURIComponent(name), { method: 'DELETE' }).then(()=>load());
             }
+        }
+        function otaUp(file) {
+            if(!file) return;
+            if(!file.name.endsWith('.bin')) { document.getElementById('otaSt').textContent = '❌ Please select a .bin file'; return; }
+            let st = document.getElementById('otaSt');
+            let prog = document.getElementById('otaProg');
+            let bar = document.getElementById('otaBar');
+            st.textContent = `Uploading firmware: ${file.name} (${(file.size/1024).toFixed(0)} KB)...`;
+            prog.style.display = 'block';
+            bar.style.width = '0%';
+
+            let xhr = new XMLHttpRequest();
+            xhr.open('POST', '/ota', true);
+            xhr.upload.onprogress = function(e) {
+                if(e.lengthComputable) {
+                    let pct = Math.round((e.loaded / e.total) * 100);
+                    bar.style.width = pct + '%';
+                    st.textContent = `Uploading firmware... ${pct}%`;
+                }
+            };
+            xhr.onload = function() {
+                if(xhr.status === 200) {
+                    bar.style.width = '100%';
+                    st.textContent = '✅ Firmware updated! Rebooting in 3s...';
+                    setTimeout(() => { st.textContent = '🔄 Device is rebooting...'; }, 3000);
+                } else {
+                    st.textContent = '❌ Update failed: ' + xhr.responseText;
+                    prog.style.display = 'none';
+                }
+            };
+            xhr.onerror = function() {
+                st.textContent = '❌ Upload failed. Check connection.';
+                prog.style.display = 'none';
+            };
+            let fd = new FormData();
+            fd.append('firmware', file, file.name);
+            xhr.send(fd);
         }
         load();
     </script>
@@ -182,5 +241,48 @@ void WebServerManager::setupRoutes() {
             m_libManager.scanBooksDirectory();
         }
     });
-}
 
+    // --- OTA Firmware Update Route ---
+    m_server.on("/ota", HTTP_POST, [](AsyncWebServerRequest *request) {
+        bool success = !Update.hasError();
+        AsyncWebServerResponse *response = request->beginResponse(
+            success ? 200 : 500, "text/plain",
+            success ? "OK" : "Update Failed"
+        );
+        response->addHeader("Connection", "close");
+        request->send(response);
+        if (success) {
+            Serial.println("[OTA] Update successful! Rebooting...");
+            delay(1000);
+            ESP.restart();
+        }
+    }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        if (index == 0) {
+            Serial.printf("[OTA] Starting firmware update: %s\n", filename.c_str());
+            // Use the content length from the request to size the update
+            size_t contentLen = request->contentLength();
+            if (!Update.begin(contentLen > 0 ? contentLen : UPDATE_SIZE_UNKNOWN)) {
+                Serial.printf("[OTA] Not enough space for update! Error: %s\n", Update.errorString());
+                Update.printError(Serial);
+                return;
+            }
+            Serial.println("[OTA] Update started...");
+        }
+
+        if (Update.isRunning()) {
+            if (Update.write(data, len) != len) {
+                Serial.printf("[OTA] Write failed at offset %d! Error: %s\n", index, Update.errorString());
+                Update.printError(Serial);
+            }
+        }
+
+        if (final) {
+            if (Update.end(true)) {
+                Serial.printf("[OTA] Update complete! Total size: %d bytes\n", index + len);
+            } else {
+                Serial.printf("[OTA] Update finalization failed! Error: %s\n", Update.errorString());
+                Update.printError(Serial);
+            }
+        }
+    });
+}

@@ -51,4 +51,7 @@
 #define LINES_PER_PAGE  8
 #define BOOKS_DIR       "/books"
 
+// Auto Page Turn Defaults
+#define DEFAULT_AUTO_PAGE_SEC 15
+
 #endif // CONFIG_H

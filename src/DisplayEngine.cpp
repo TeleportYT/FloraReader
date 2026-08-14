@@ -416,7 +416,7 @@ void DisplayEngine::renderLibrary(const std::vector<String>& bookList, int selec
     } while (m_display.nextPage());
 }
 
-void DisplayEngine::renderReadingPage(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, bool partial) {
+void DisplayEngine::renderReadingPage(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, bool autoPageOn, bool partial) {
     int w = getScreenWidth();
     int h = getScreenHeight();
     m_pageTurnCount++;
@@ -457,6 +457,14 @@ void DisplayEngine::renderReadingPage(const char* bookTitle, const std::vector<S
         
         drawFloralFooter(currentPage, totalPages, progressPercent);
 
+        // Auto page turn indicator
+        if (autoPageOn) {
+            int footerY = h - 18;
+            m_display.setCursor(w - (w < 200 ? 88 : 100), footerY + 5);
+            m_display.setTextColor(GxEPD_BLACK);
+            m_display.print("\x10Auto");  // ▶ Auto
+        }
+
     } while (m_display.nextPage());
 }
 
@@ -495,9 +503,9 @@ void DisplayEngine::renderWiFiPortal(const char* ssid, const char* ipAddress, in
         
         m_display.setTextSize(1);
         m_display.setCursor(boxX, 114);
-        m_display.print("Upload .txt, .md or .bmp!");
+        m_display.print("Upload .txt .md .bmp or .bin!");
         m_display.setCursor(boxX, 128);
-        m_display.printf("SD Books: %d", fileCount);
+        m_display.printf("SD Books: %d | OTA Ready", fileCount);
         
         m_display.setCursor(boxX, h - 14);
         m_display.print("Press [38] to Exit");
@@ -505,7 +513,7 @@ void DisplayEngine::renderWiFiPortal(const char* ssid, const char* ipAddress, in
     } while (m_display.nextPage());
 }
 
-void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode) {
+void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode, int autoPageInterval) {
     int w = getScreenWidth();
     int h = getScreenHeight();
     m_display.setPartialWindow(0, 0, w, h);
@@ -518,29 +526,36 @@ void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, i
         const char* rotStr = (rotationMode == 1) ? "Landscape" : "Portrait";
         char refreshStr[32];
         snprintf(refreshStr, sizeof(refreshStr), "Every %d Pages", refreshInterval);
+        char autoPageStr[32];
+        snprintf(autoPageStr, sizeof(autoPageStr), "Every %d Seconds", autoPageInterval);
 
         const char* labels[] = {
             "Orientation",
             "Full Refresh Rate",
+            "Auto Page Speed",
             "Back to Main Menu"
         };
         const char* values[] = {
             rotStr,
             refreshStr,
+            autoPageStr,
             ""
         };
 
+        int totalItems = 4;
         int startY = 30;
         int itemX = 22;
         int itemW = w - 44;
+        int itemH = (h < 200) ? 26 : 30;
+        int itemSpacing = (h < 200) ? 30 : 36;
 
-        for (int i = 0; i < 3; i++) {
-            int itemY = startY + (i * 36);
+        for (int i = 0; i < totalItems; i++) {
+            int itemY = startY + (i * itemSpacing);
             if (i == selectedIndex) {
-                m_display.fillRect(itemX, itemY - 2, itemW, 30, GxEPD_BLACK);
+                m_display.fillRect(itemX, itemY - 2, itemW, itemH, GxEPD_BLACK);
                 m_display.setTextColor(GxEPD_WHITE);
             } else {
-                m_display.drawRect(itemX, itemY - 2, itemW, 30, GxEPD_BLACK);
+                m_display.drawRect(itemX, itemY - 2, itemW, itemH, GxEPD_BLACK);
                 m_display.setTextColor(GxEPD_BLACK);
             }
 
@@ -549,7 +564,7 @@ void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, i
             m_display.print(labels[i]);
 
             if (values[i][0] != '\0') {
-                m_display.setCursor(itemX + 6, itemY + 16);
+                m_display.setCursor(itemX + 6, itemY + 14);
                 m_display.print(values[i]);
             }
         }
