@@ -28,7 +28,7 @@ Your LilyGO T5S board has 3 main navigation buttons on the side:
 
 ---
 
-## 2. Uploading Books Wirelessly from iPhone
+## 2. Uploading Books Wirelessly from Device
 
 You don't need to take out the MicroSD card to add new books!
 
@@ -37,7 +37,7 @@ You don't need to take out the MicroSD card to add new books!
    - **Network SSID**: `FloraReader-WiFi`
    - **Password**: `flower123`
    - **Web Address**: `http://192.168.4.1`
-3. On your iPhone:
+3. On your Device:
    - Open **Settings** -> **Wi-Fi**.
    - Connect to **FloraReader-WiFi**.
    - Open **Safari** or **Chrome** and go to **`http://192.168.4.1`**.
