@@ -155,10 +155,9 @@ void WebServerManager::begin() {
     Serial.printf("[WiFi] SoftAP %s => SSID: %s, IP: %s\n", 
                   apStarted ? "STARTED" : "FAILED!", WIFI_AP_SSID, m_ipAddress.c_str());
 
-    // NOTE: We intentionally do NOT start a wildcard DNS server.
-    // Wildcard DNS (*) hijacks all DNS queries which causes iPhones/Android
-    // to think there is no internet and aggressively disconnect from the AP.
-    // Users should navigate to http://192.168.4.1 directly.
+    // Captive portal DNS: redirect all domain lookups to our IP
+    // so phones auto-open the FloraReader upload page on connect
+    m_dnsServer.start(53, "*", IP);
 
     if (!m_routesSetup) {
         setupRoutes();
@@ -166,12 +165,13 @@ void WebServerManager::begin() {
     }
     m_server.begin();
     m_running = true;
-    Serial.println("[WiFi] Web server listening on port 80. Navigate to http://192.168.4.1");
+    Serial.println("[WiFi] Captive portal active. Page should auto-open on phone connect.");
 }
 
 void WebServerManager::stop() {
     if (m_running) {
         m_running = false;
+        m_dnsServer.stop();
         m_server.end();
         WiFi.softAPdisconnect(true);
         delay(100);
@@ -183,7 +183,9 @@ void WebServerManager::stop() {
 }
 
 void WebServerManager::loop() {
-    // No DNS processing needed anymore
+    if (m_running) {
+        m_dnsServer.processNextRequest();
+    }
 }
 
 void WebServerManager::setupRoutes() {
