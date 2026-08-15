@@ -43,7 +43,14 @@ void BLEManager::begin() {
 void BLEManager::stop() {
     if (m_initialized && m_pServer) {
         m_pServer->getAdvertising()->stop();
-        Serial.println("[BLE] Bluetooth advertising stopped.");
+        Serial.println("[BLE] Stopping advertising...");
+    }
+    if (m_initialized) {
+        BLEDevice::deinit(false);  // Release radio without freeing memory
+        m_initialized = false;
+        m_pServer = nullptr;
+        m_pTxCharacteristic = nullptr;
+        Serial.println("[BLE] BLE fully deinitialized (radio released for WiFi).");
     }
     m_deviceConnected = false;
 }

@@ -133,20 +133,32 @@ void WebServerManager::begin() {
     if (m_running) return;
 
     Serial.println("[WiFi] Starting Access Point mode...");
+    
+    // Ensure radio is fully clean before starting WiFi
     WiFi.disconnect(true);
-    delay(50);
+    WiFi.mode(WIFI_OFF);
+    delay(200);  // Give radio time to fully reset
+    
     WiFi.mode(WIFI_AP);
-    delay(50);
+    delay(100);
+    
     WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
+    
+    // Start AP on channel 1, not hidden, max 4 connections
     bool apStarted = WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS, 1, 0, 4);
-    WiFi.setSleep(false);  // Disable WiFi modem sleep to keep AP alive
+    WiFi.setSleep(false);  // Disable modem sleep to prevent idle disconnects
+    
+    delay(500);  // Critical: let the AP fully stabilize before serving
     
     IPAddress IP = WiFi.softAPIP();
     m_ipAddress = IP.toString();
-    Serial.printf("[WiFi] SoftAP status: %s (SSID: %s, Pass: %s, IP: %s)\n", 
-                  apStarted ? "ACTIVE" : "FAILED", WIFI_AP_SSID, WIFI_AP_PASS, m_ipAddress.c_str());
+    Serial.printf("[WiFi] SoftAP %s => SSID: %s, IP: %s\n", 
+                  apStarted ? "STARTED" : "FAILED!", WIFI_AP_SSID, m_ipAddress.c_str());
 
-    m_dnsServer.start(53, "*", IP);
+    // NOTE: We intentionally do NOT start a wildcard DNS server.
+    // Wildcard DNS (*) hijacks all DNS queries which causes iPhones/Android
+    // to think there is no internet and aggressively disconnect from the AP.
+    // Users should navigate to http://192.168.4.1 directly.
 
     if (!m_routesSetup) {
         setupRoutes();
@@ -154,25 +166,24 @@ void WebServerManager::begin() {
     }
     m_server.begin();
     m_running = true;
+    Serial.println("[WiFi] Web server listening on port 80. Navigate to http://192.168.4.1");
 }
 
 void WebServerManager::stop() {
     if (m_running) {
         m_running = false;
-        m_dnsServer.stop();
         m_server.end();
         WiFi.softAPdisconnect(true);
+        delay(100);
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
-        delay(50);
+        delay(100);
         Serial.println("[WiFi] Web Server and AP stopped safely.");
     }
 }
 
 void WebServerManager::loop() {
-    if (m_running) {
-        m_dnsServer.processNextRequest();
-    }
+    // No DNS processing needed anymore
 }
 
 void WebServerManager::setupRoutes() {

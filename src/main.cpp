@@ -205,7 +205,7 @@ void handleInput() {
                     currentState = STATE_LIBRARY;
                 } else if (menuSelection == 2) {
                     bleManager.stop();
-                    delay(100);
+                    delay(500);  // Let BLE radio fully release before WiFi starts
                     webServer.begin();
                     currentState = STATE_WIFI_PORTAL;
                 } else if (menuSelection == 3) {
