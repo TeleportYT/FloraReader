@@ -20,6 +20,13 @@ public:
     bool prevPage();
     bool jumpToPage(int pageNum);
     
+    // Font Size (0=Small, 1=Medium, 2=Large)
+    void setFontSize(int size);
+    int getFontSize() const { return m_fontSize; }
+    int getGlyphWidth() const;
+    int getLineHeight() const;
+    int getTextSize() const;
+    
     // Getters for Display Engine
     std::vector<String> getCurrentPageLines();
     int getCurrentPage() const { return m_currentPage; }
@@ -49,6 +56,7 @@ private:
     int m_totalPages;
     int m_screenWidth;
     int m_screenHeight;
+    int m_fontSize;  // 0=Small, 1=Medium(default), 2=Large
     
     // Byte offset index of each page start position
     std::vector<size_t> m_pageOffsets;

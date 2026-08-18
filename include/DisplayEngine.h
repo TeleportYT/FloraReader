@@ -43,8 +43,9 @@ public:
     void renderMainMenu(int selectedIndex, int batteryPct);
     void renderLibrary(const std::vector<String>& bookList, int selectedIndex, int topIndex, int totalBooks);
     void renderReadingPage(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, bool autoPageOn = false, bool partial = true);
+    void renderReadingPageSized(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, int textSize, int lineHeight, bool autoPageOn = false, bool partial = true);
     void renderWiFiPortal(const char* ssid, const char* ipAddress, int fileCount);
-    void renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode, int autoPageInterval);
+    void renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode, int autoPageInterval, int fontSize = 1);
     void renderNotification(const char* message, const char* subtext);
     void renderSleepScreen(int batteryPercent);
 

@@ -417,6 +417,10 @@ void DisplayEngine::renderLibrary(const std::vector<String>& bookList, int selec
 }
 
 void DisplayEngine::renderReadingPage(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, bool autoPageOn, bool partial) {
+    renderReadingPageSized(bookTitle, pageLines, currentPage, totalPages, progressPercent, 1, 16, autoPageOn, partial);
+}
+
+void DisplayEngine::renderReadingPageSized(const char* bookTitle, const std::vector<String>& pageLines, int currentPage, int totalPages, float progressPercent, int textSize, int lineHeight, bool autoPageOn, bool partial) {
     int w = getScreenWidth();
     int h = getScreenHeight();
     m_pageTurnCount++;
@@ -434,27 +438,31 @@ void DisplayEngine::renderReadingPage(const char* bookTitle, const std::vector<S
         m_display.fillScreen(GxEPD_WHITE);
         drawFloralHeader(bookTitle, 85, false);
         
-        m_display.setTextSize(1);
+        m_display.setTextSize(textSize);
         m_display.setTextColor(GxEPD_BLACK);
         
         int lineY = 28;
-        int lineSpacing = 16;
+        int lineSpacing = lineHeight;
+        int textXOffset = 8;
         
         for (const auto& line : pageLines) {
             bool isDayHeader = (line.startsWith("Day ") || line.startsWith("[Day ") || line.startsWith("# Day "));
             if (isDayHeader) {
                 m_display.drawFastHLine(8, lineY - 2, w - 16, GxEPD_BLACK);
                 m_display.drawBitmap(8, lineY, epd_bitmap_sakura_16x16, 16, 16, GxEPD_BLACK);
+                m_display.setTextSize(textSize);
                 drawStringWithHebrew(28, lineY + 4, line);
                 m_display.drawBitmap(w - 24, lineY, epd_bitmap_sakura_16x16, 16, 16, GxEPD_BLACK);
-                lineY += 22;
+                lineY += lineSpacing + 6;
             } else {
-                drawStringWithHebrew(8, lineY, line);
+                m_display.setTextSize(textSize);
+                drawStringWithHebrew(textXOffset, lineY, line);
                 lineY += lineSpacing;
             }
             if (lineY > h - 24) break;
         }
         
+        m_display.setTextSize(1); // Footer always small
         drawFloralFooter(currentPage, totalPages, progressPercent);
 
         // Auto page turn indicator
@@ -513,7 +521,7 @@ void DisplayEngine::renderWiFiPortal(const char* ssid, const char* ipAddress, in
     } while (m_display.nextPage());
 }
 
-void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode, int autoPageInterval) {
+void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, int rotationMode, int autoPageInterval, int fontSize) {
     int w = getScreenWidth();
     int h = getScreenHeight();
     m_display.setPartialWindow(0, 0, w, h);
@@ -528,26 +536,29 @@ void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, i
         snprintf(refreshStr, sizeof(refreshStr), "Every %d Pages", refreshInterval);
         char autoPageStr[32];
         snprintf(autoPageStr, sizeof(autoPageStr), "Every %d Seconds", autoPageInterval);
+        const char* fontStr = (fontSize == 0) ? "Small" : (fontSize == 2) ? "Large" : "Medium";
 
         const char* labels[] = {
             "Orientation",
             "Full Refresh Rate",
             "Auto Page Speed",
+            "Font Size",
             "Back to Main Menu"
         };
         const char* values[] = {
             rotStr,
             refreshStr,
             autoPageStr,
+            fontStr,
             ""
         };
 
-        int totalItems = 4;
-        int startY = 30;
+        int totalItems = 5;
+        int startY = 28;
         int itemX = 22;
         int itemW = w - 44;
-        int itemH = (h < 200) ? 26 : 30;
-        int itemSpacing = (h < 200) ? 30 : 36;
+        int itemH = (h < 200) ? 22 : 24;
+        int itemSpacing = (h < 200) ? 25 : 28;
 
         for (int i = 0; i < totalItems; i++) {
             int itemY = startY + (i * itemSpacing);
@@ -564,7 +575,9 @@ void DisplayEngine::renderSettingsMenu(int selectedIndex, int refreshInterval, i
             m_display.print(labels[i]);
 
             if (values[i][0] != '\0') {
-                m_display.setCursor(itemX + 6, itemY + 14);
+                // Print value right-aligned
+                int valLen = strlen(values[i]) * 6;
+                m_display.setCursor(itemX + itemW - valLen - 6, itemY + 3);
                 m_display.print(values[i]);
             }
         }

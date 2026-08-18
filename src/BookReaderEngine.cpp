@@ -1,7 +1,42 @@
 #include "BookReaderEngine.h"
 
 BookReaderEngine::BookReaderEngine() 
-    : m_fileSize(0), m_currentPage(1), m_totalPages(1), m_screenWidth(264), m_screenHeight(176) {
+    : m_fileSize(0), m_currentPage(1), m_totalPages(1), m_screenWidth(264), m_screenHeight(176), m_fontSize(1) {
+}
+
+void BookReaderEngine::setFontSize(int size) {
+    if (size < 0) size = 0;
+    if (size > 2) size = 2;
+    if (m_fontSize != size) {
+        m_fontSize = size;
+        Serial.printf("[BookReader] Font size changed to %s\n", size == 0 ? "Small" : size == 1 ? "Medium" : "Large");
+        if (m_filePath.length() > 0) {
+            int savedPage = m_currentPage;
+            calculatePageOffsets();
+            // Try to stay near the same reading position
+            if (savedPage > m_totalPages) savedPage = m_totalPages;
+            m_currentPage = savedPage;
+        }
+    }
+}
+
+int BookReaderEngine::getGlyphWidth() const {
+    // All sizes use textSize(1) = 6px wide glyphs
+    // Avoids crash with custom Hebrew bitmap rendering at textSize(2)
+    return 6;
+}
+
+int BookReaderEngine::getLineHeight() const {
+    switch (m_fontSize) {
+        case 0: return 12;  // Small: compact, more text per page
+        case 2: return 20;  // Large: spacious, easier to read
+        default: return 16; // Medium: balanced default
+    }
+}
+
+int BookReaderEngine::getTextSize() const {
+    // Always textSize(1) — safe with custom Hebrew bitmap rendering
+    return 1;
 }
 
 void BookReaderEngine::setDisplayDimensions(int width, int height) {
@@ -161,10 +196,12 @@ void BookReaderEngine::calculatePageOffsets() {
     File file = SD.open(m_filePath, FILE_READ);
     if (!file) return;
 
-    int maxCharsPerLine = (m_screenWidth - 16) / 6;
-    int linesPerPage = (m_screenHeight - 44) / 16;
+    int glyphW = getGlyphWidth();
+    int lineH = getLineHeight();
+    int maxCharsPerLine = (m_screenWidth - 16) / glyphW;
+    int linesPerPage = (m_screenHeight - 44) / lineH;
     if (maxCharsPerLine < 10) maxCharsPerLine = 10;
-    if (linesPerPage < 4) linesPerPage = 4;
+    if (linesPerPage < 3) linesPerPage = 3;
     int currentLineCount = 0;
 
     char lineBuf[512];
@@ -291,10 +328,12 @@ std::vector<String> BookReaderEngine::getCurrentPageLines() {
     size_t startByte = m_pageOffsets[m_currentPage - 1];
     file.seek(startByte);
 
-    int maxCharsPerLine = (m_screenWidth - 16) / 6;
-    int linesInPage = (m_screenHeight - 44) / 16;
+    int glyphW = getGlyphWidth();
+    int lineH = getLineHeight();
+    int maxCharsPerLine = (m_screenWidth - 16) / glyphW;
+    int linesInPage = (m_screenHeight - 44) / lineH;
     if (maxCharsPerLine < 10) maxCharsPerLine = 10;
-    if (linesInPage < 4) linesInPage = 4;
+    if (linesInPage < 3) linesInPage = 3;
 
     while (file.available() && (int)pageLines.size() < linesInPage) {
         size_t currentPos = file.position();

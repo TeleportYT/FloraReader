@@ -62,11 +62,13 @@ void setup() {
     int savedRot = mainPrefs.getInt("rotation", 1);
     int savedRefresh = mainPrefs.getInt("refresh_int", 10);
     int savedAutoPage = mainPrefs.getInt("auto_page_s", DEFAULT_AUTO_PAGE_SEC);
+    int savedFontSize = mainPrefs.getInt("font_size", 1); // 0=Small, 1=Medium, 2=Large
     mainPrefs.end();
 
     display.setRotationMode(savedRot);
     display.setRefreshInterval(savedRefresh);
     autoPageInterval = savedAutoPage;
+    reader.setFontSize(savedFontSize);
     reader.setDisplayDimensions(display.getScreenWidth(), display.getScreenHeight());
 
     display.renderNotification("FloraReader", "Starting up...");
@@ -279,10 +281,10 @@ void handleInput() {
 
         case STATE_SETTINGS:
             if (btn37) {
-                settingsSelection = (settingsSelection - 1 + 4) % 4;
+                settingsSelection = (settingsSelection - 1 + 5) % 5;
                 updateUI();
             } else if (btn39) {
-                settingsSelection = (settingsSelection + 1) % 4;
+                settingsSelection = (settingsSelection + 1) % 5;
                 updateUI();
             } else if (btn38) {
                 if (settingsSelection == 0) {
@@ -315,6 +317,14 @@ void handleInput() {
                     mainPrefs.end();
                     updateUI();
                 } else if (settingsSelection == 3) {
+                    // Cycle font size: Small -> Medium -> Large -> Small
+                    int newSize = (reader.getFontSize() + 1) % 3;
+                    reader.setFontSize(newSize);
+                    mainPrefs.begin(NVS_NAMESPACE, false);
+                    mainPrefs.putInt("font_size", newSize);
+                    mainPrefs.end();
+                    updateUI();
+                } else if (settingsSelection == 4) {
                     currentState = STATE_MAIN_MENU;
                     updateUI();
                 }
@@ -341,12 +351,14 @@ void updateUI() {
             break;
 
         case STATE_READING:
-            display.renderReadingPage(
+            display.renderReadingPageSized(
                 reader.getBookTitle().c_str(),
                 reader.getCurrentPageLines(),
                 reader.getCurrentPage(),
                 reader.getTotalPages(),
                 reader.getProgressPercent(),
+                reader.getTextSize(),
+                reader.getLineHeight(),
                 autoPageEnabled
             );
             break;
@@ -356,7 +368,7 @@ void updateUI() {
             break;
 
         case STATE_SETTINGS:
-            display.renderSettingsMenu(settingsSelection, display.getRefreshInterval(), display.getRotationMode(), autoPageInterval);
+            display.renderSettingsMenu(settingsSelection, display.getRefreshInterval(), display.getRotationMode(), autoPageInterval, reader.getFontSize());
             break;
 
         case STATE_SLEEP:
